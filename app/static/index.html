@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urja Meter Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f6f5f2;--panel:#fff;--ink:#1d2327;--muted:#66707a;--line:#e3e1dc;
+  --installed:#2f7d5b;--faulty:#c8553d;--decom:#8a8f98;--accent:#1f5f8b;--warn:#b7791f;
+  --radius:10px;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#14171a;--panel:#1c2024;--ink:#e6e8ea;--muted:#9aa3ab;--line:#2c3237;
+  --installed:#4fb286;--faulty:#e2775f;--decom:#7d848c;--accent:#6aa9d6;--warn:#d9a441;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;padding:18px 20px 8px}
+header h1{font-size:18px;margin:0;letter-spacing:.2px}
+header .meta{color:var(--muted);font-size:12px}
+header a{color:var(--accent);font-size:12px}
+main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;padding:8px 20px 24px}
+@media (max-width:980px){main{grid-template-columns:1fr;padding:8px 16px 24px}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;grid-column:1/-1}
+@media (max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi.installed .v{color:var(--installed)}.kpi.faulty .v{color:var(--faulty)}.kpi.decom .v{color:var(--decom)}.kpi.flag .v{color:var(--warn)}
+#map{height:420px;border-radius:8px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:8px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.controls{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+input,select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;min-width:0}
+input{flex:1}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr.row{cursor:pointer}tr.row:hover td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+tr.sel td{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.mono{font-family:var(--mono);font-size:12.5px}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.s-Installed{color:var(--installed)}.s-Faulty{color:var(--faulty)}.s-Decommissioned{color:var(--decom)}
+.flag{color:var(--warn);font-size:12px}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted);font-size:12px}
+button{background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font:inherit;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+.tablewrap{overflow-x:auto}
+.tree{font-size:13px;max-height:420px;overflow:auto}
+.tree details{margin-left:12px}.tree>details{margin-left:0}
+.tree summary{cursor:pointer;padding:3px 0;list-style:none;display:flex;gap:8px;align-items:center}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:"▸";color:var(--muted);width:10px}
+.tree details[open]>summary::before{content:"▾"}
+.tree .leaf{margin-left:30px;padding:3px 0;display:flex;gap:8px;cursor:pointer}
+.bar{flex:0 0 70px;height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.tree .count{color:var(--muted);font-variant-numeric:tabular-nums;margin-left:auto}
+.tree .lvl{color:var(--muted);font-size:11px;width:22px}
+.alias{color:var(--warn);font-size:11px}
+#detail .empty{color:var(--muted);padding:30px 0;text-align:center}
+.grid2{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}
+.grid2 dt{color:var(--muted)}.grid2 dd{margin:0}
+.path{display:flex;flex-wrap:wrap;gap:4px;font-size:12px;margin:10px 0}
+.path span{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+.path span.fixed{border-color:var(--warn)}
+.chartbox{position:relative;height:200px;margin-top:10px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+.stats b{color:var(--ink);font-size:15px;display:block;font-variant-numeric:tabular-nums}
+.issues{font-size:12.5px;max-height:260px;overflow:auto}
+.issues li{margin:4px 0}
+.err{color:var(--faulty);font-size:13px}
+.full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Urja Meter Explorer</h1>
+  <span class="meta" id="freshness">loading…</span>
+  <a href="/docs">API docs</a>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel">
+    <h2>Meter map</h2>
+    <div id="map"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--installed)"></i>Installed</span>
+      <span><i class="dot" style="background:var(--faulty)"></i>Faulty</span>
+      <span><i class="dot" style="background:var(--decom)"></i>Decommissioned</span>
+    </div>
+  </section>
+
+  <section class="panel" id="detail"><h2>Meter</h2><div class="empty">Pick a meter on the map, in the table or in the network tree.</div></section>
+
+  <section class="panel">
+    <h2>Meters</h2>
+    <div class="controls">
+      <input id="q" placeholder="Search meter id or serial…" aria-label="Search">
+      <select id="status" aria-label="Status"><option value="">All statuses</option><option>Installed</option><option>Faulty</option><option>Decommissioned</option></select>
+      <select id="flags" aria-label="Data quality"><option value="">Any data quality</option><option value="true">Needed repair</option></select>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Meter</th><th>Serial</th><th>Make</th><th>Phase</th><th>Status</th><th>DT</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="pager"><button id="prev">Previous</button><span id="pageinfo"></span><button id="next">Next</button></div>
+  </section>
+
+  <section class="panel">
+    <h2>Network hierarchy</h2>
+    <div class="tree" id="tree">loading…</div>
+  </section>
+
+  <section class="panel full">
+    <h2>Data quality: what the API repaired</h2>
+    <ul class="issues" id="issues"></ul>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const COLORS = () => ({Installed: css('--installed'), Faulty: css('--faulty'), Decommissioned: css('--decom')});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = async p => { const r = await fetch(p); if (!r.ok) throw new Error((await r.json().catch(()=>({}))).message || r.status); return r.json(); };
+
+let page = 1, markers = {}, chart, map, selected;
+
+async function loadStats(){
+  const s = await api('/stats');
+  const b = s.by_status;
+  const tiles = [['Meters', s.meters, ''], ['Installed', b.Installed||0, 'installed'], ['Faulty', b.Faulty||0, 'faulty'],
+                 ['Decommissioned', b.Decommissioned||0, 'decom'], ['Needed data repair', s.meters_with_quality_flags, 'flag']];
+  $('#kpis').innerHTML = tiles.map(([l,v,c]) => `<div class="panel kpi ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  const i = s.index;
+  $('#freshness').textContent = `${s.transformers} transformers · index from ${i.source} · synced ${i.synced_at ? new Date(i.synced_at).toLocaleTimeString() : '—'}${i.stale ? ' (stale)' : ''}`;
+}
+
+async function loadMap(){
+  map = L.map('map', {scrollWheelZoom:false}).setView([26.91, 75.79], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+  const all = await api('/meters?page_size=500');
+  const c = COLORS();
+  for (const m of all.data){
+    if (!m.location) continue;
+    const mk = L.circleMarker([m.location.latitude, m.location.longitude], {radius:5, weight:1, color:c[m.install_status]||'#888', fillOpacity:.75})
+      .bindTooltip(`${m.meter_id} · ${m.install_status} · ${m.dt_code}`).on('click', () => showMeter(m.meter_id));
+    mk.addTo(map); markers[m.meter_id] = mk;
+  }
+  const pts = Object.values(markers).map(mk => mk.getLatLng());
+  if (pts.length) map.fitBounds(L.latLngBounds(pts), {padding:[16,16]});
+}
+
+async function loadTable(){
+  const params = new URLSearchParams({page, page_size: 12});
+  if ($('#q').value) params.set('q', $('#q').value);
+  if ($('#status').value) params.set('status', $('#status').value);
+  if ($('#flags').value) params.set('has_quality_flags', $('#flags').value);
+  const r = await api('/meters?' + params);
+  $('#rows').innerHTML = r.data.map(m => `<tr class="row ${m.meter_id===selected?'sel':''}" data-id="${m.meter_id}">
+    <td class="mono">${m.meter_id}</td><td class="mono">${esc(m.serial_no)}</td><td>${esc(m.make)}</td><td>${esc(m.phase_type)}</td>
+    <td><span class="pill s-${m.install_status}">${m.install_status}</span></td><td class="mono">${m.dt_code}</td><td></td></tr>`).join('')
+    || '<tr><td colspan="7" style="color:var(--muted)">No meters match.</td></tr>';
+  const p = r.pagination;
+  $('#pageinfo').textContent = `Page ${p.page} of ${p.total_pages} · ${p.total} meters`;
+  $('#prev').disabled = p.page <= 1; $('#next').disabled = p.page >= p.total_pages;
+}
+
+function bar(sc, total){
+  const c = COLORS();
+  return `<span class="bar">${['Installed','Faulty','Decommissioned'].map(k => `<i style="width:${100*(sc[k]||0)/Math.max(total,1)}%;background:${c[k]}"></i>`).join('')}</span>`;
+}
+const LV = {zone:'Z', circle:'C', division:'D', subdivision:'SD', substation:'SS', feeder:'F', dt:'DT'};
+function renderNode(n){
+  const head = `<span class="lvl">${LV[n.level]}</span><span>${esc(n.name)} <span class="mono" style="color:var(--muted)">${esc(n.code)}</span>${(n.aliases||[]).length ? ` <span class="alias" title="Other names used by meters">aka ${n.aliases.map(esc).join(', ')}</span>` : ''}</span>${bar(n.status_counts, n.meter_count)}<span class="count">${n.meter_count}</span>`;
+  if (n.level === 'dt'){
+    return `<details><summary>${head}</summary>${(n.meters||[]).map(id => `<div class="leaf mono" data-id="${id}">${id}</div>`).join('')}</details>`;
+  }
+  return `<details><summary>${head}</summary>${(n.children||[]).map(renderNode).join('')}</details>`;
+}
+async function loadTree(){
+  const t = await api('/hierarchy?include_meters=true');
+  $('#tree').innerHTML = t.map(renderNode).join('');
+}
+
+async function loadIssues(){
+  const all = await api('/hierarchy/issues');
+  const per = all.filter(i => i.kind !== 'code_reused_across_parents');
+  const reused = all.length - per.length;
+  $('#issues').innerHTML = per.map(i => `<li><b>${esc(i.kind.replaceAll('_',' '))}</b>${i.dt_code ? ` on <span class="mono">${i.dt_code}</span>` : ''}: ${esc(i.detail)} ${i.meter_ids.length ? `<span class="mono" style="color:var(--muted)">(${i.meter_ids.slice(0,6).join(', ')}${i.meter_ids.length>6?'…':''})</span>`:''}</li>`).join('')
+    + `<li style="color:var(--muted)">${reused} hierarchy codes reappear under more than one parent (e.g. a subdivision code under several divisions), so the tree keys nodes by their full path. See <span class="mono">/hierarchy/issues?kind=code_reused_across_parents</span>.</li>`;
+}
+
+async function showMeter(id){
+  selected = id;
+  document.querySelectorAll('tr.row').forEach(r => r.classList.toggle('sel', r.dataset.id === id));
+  const el = $('#detail');
+  el.innerHTML = `<h2>Meter ${id}</h2><div class="empty">Loading…</div>`;
+  try{
+    const [m, c] = await Promise.all([api(`/meters/${id}`), api(`/meters/${id}/consumption?granularity=daily`)]);
+    if (markers[id]){ map.panTo(markers[id].getLatLng()); markers[id].openTooltip(); }
+    const fixedLevels = new Set(m.quality_flags.map(f => f.level));
+    const path = ['zone','circle','division','subdivision','substation','feeder','dt']
+      .map(l => `<span class="${fixedLevels.has(l)?'fixed':''}" title="${l}${fixedLevels.has(l)?' (repaired)':''}">${esc(m.hierarchy[l].name)} <span class="mono">${esc(m.hierarchy[l].code)}</span></span>`).join('');
+    const s = c.summary || {};
+    const warn = c.issues.filter(i => !i.startsWith('duplicate_timestamp'));
+    el.innerHTML = `<h2>Meter ${id} <span class="pill s-${m.install_status}">${m.install_status}</span></h2>
+      <dl class="grid2"><dt>Serial</dt><dd class="mono">${esc(m.serial_no)}</dd><dt>Make</dt><dd>${esc(m.make)} · ${esc(m.phase_type)} phase · ${esc(m.install_type)}</dd>
+      <dt>Record</dt><dd>${esc(m.build)} format</dd><dt>Location</dt><dd class="mono">${m.location ? m.location.latitude.toFixed(5)+', '+m.location.longitude.toFixed(5) : '—'}</dd></dl>
+      <div class="path">${path}</div>
+      ${m.quality_flags.map(f => `<div class="flag">⚑ ${esc(f.detail)}</div>`).join('')}
+      <div class="stats"><div><b>${s.total_kwh ?? '—'}</b>kWh in window</div><div><b>${s.average_daily_kwh ?? '—'}</b>kWh / day</div>
+        <div><b>${s.power_factor ?? '—'}</b>power factor</div><div><b>${s.voltage_min ?? '—'}–${s.voltage_max ?? '—'} V</b>voltage range</div>
+        <div><b>${c.resolution}</b>portal resolution</div></div>
+      ${warn.map(w => `<div class="flag">⚑ ${esc(w.replaceAll('_',' '))}</div>`).join('')}
+      <div class="chartbox"><canvas id="chart"></canvas></div>`;
+    if (chart) chart.destroy();
+    chart = new Chart($('#chart'), {type:'bar', data:{labels:c.daily.map(d => d.date.slice(5)),
+      datasets:[{label:'kWh per day', data:c.daily.map(d => d.kwh), backgroundColor:css('--accent'), borderRadius:4}]},
+      options:{maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}, ticks:{color:css('--muted')}}, y:{ticks:{color:css('--muted')}, grid:{color:css('--line')}}}}});
+  }catch(e){ el.innerHTML = `<h2>Meter ${id}</h2><div class="err">Couldn't load: ${esc(e.message)}</div>`; }
+}
+
+document.addEventListener('click', e => { const t = e.target.closest('[data-id]'); if (t) showMeter(t.dataset.id); });
+let deb; $('#q').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); }, 250); });
+$('#status').onchange = $('#flags').onchange = () => { page = 1; loadTable(); };
+$('#prev').onclick = () => { page--; loadTable(); };
+$('#next').onclick = () => { page++; loadTable(); };
+
+(async () => {
+  try { await loadStats(); } catch (e) { $('#freshness').innerHTML = `<span class="err">API error: ${esc(e.message)}</span>`; return; }
+  loadMap(); loadTable(); loadTree(); loadIssues();
+})();
+</script>
+</body>
+</html>

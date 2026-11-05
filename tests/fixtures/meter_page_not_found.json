@@ -1,0 +1,1 @@
+{"type":"data","nodes":[null,{"type":"data","data":[{"user":1},{"name":2,"email":3},"Ops Desk","operator@urja.local"],"uses":{}},{"type":"error","error":{"message":"Meter not found"},"status":404}]}
